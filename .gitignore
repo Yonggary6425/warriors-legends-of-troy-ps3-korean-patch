@@ -1,0 +1,15 @@
+# 게임 데이터와 빌드 결과물은 올리지 않습니다
+*.iso
+*.cpkg
+*.mpkg
+*.g1n
+*.ini
+*.bin
+*.exe
+*.tsv
+src.json
+ko_full.json
+canon.json
+charset.txt
+out/
+batches/
