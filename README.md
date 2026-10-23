@@ -18,7 +18,7 @@
 
 | 파일 | MD5 | SHA-256 |
 |---|---|---|
-| `Troy_KOR_Patch_v1.0.zip` | `90684c9babfa233878111e7e2348b969` | `b83a02ed1f5702152fbb2dd12b3871996d049c8aae2f366e98cee852d766482d` |
+| `Troy_KOR_Patch_v1.0.zip` | `80008f0c50997d56e494c12b85835d37` | `bd4115ffbeedf6d87d6eb75665dc0b055cd5d9371d240cf9ee28b34869e3e3b6` |
 | `TroyKOR_Patcher.exe` | `f6723c6e6ae95084e9e6c5f7a11c53f9` | `362c7093fcf1a4abf0f4a9f20614622ff300d582570c99a1db8047ba9f22921e` |
 
 받은 파일이 맞는지 확인하려면 PowerShell에서 다음을 실행해 위 값과 비교하세요.
@@ -34,15 +34,17 @@ Get-FileHash .\Troy_KOR_Patch_v1.0.zip -Algorithm SHA256
 
 | 항목 | 값 |
 |---|---|
-| 게임 ID | BLES01183 (유럽판, 디스크 버전 01.03) |
+| 게임 ID | BLES01183 (유럽판, 디스크 버전 01.00) |
 | 파일 형식 | 복호화(decrypted)된 ISO |
-| 파일명 (예시) | `Warriors Legends of Troy [E].iso` |
+| 파일명 (예시) | `Warriors Legends of Troy [U].iso` |
 | 크기 | 14,682,554,368 바이트 |
 | MD5 | `e1be3b6f22d9f5783e2e98ad3008019e` |
 
 > 위 MD5는 제작에 쓴 ISO의 값입니다. 덤프 도구에 따라 ISO 전체 해시가 다를 수 있는데, 이 경우에도 패처가 바꿀 원본 파일 103개의 SHA-1을 하나씩 확인하므로 패처가 거부하지 않으면 그대로 쓰셔도 됩니다.
 
 > 북미판(BLUS) 등 다른 판본이나 암호화된 ISO에는 적용되지 않습니다. 패처가 적용 전에 자동으로 확인한 뒤 거부합니다.
+>
+> **국내 정발판(영어판)**: 지원 여부를 아직 확인하지 못했습니다. 정발판을 가지고 계신 분이 [Issues](../../issues)에 제품 코드(BL??#####)와 패처 실행 화면을 남겨 주시면 다음 버전에서 지원을 검토하겠습니다.
 
 ## 적용 방법
 
