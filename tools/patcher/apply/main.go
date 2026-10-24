@@ -297,7 +297,7 @@ func copyFile(src, dst string) error {
 
 func run() error {
 	fmt.Println("==============================================")
-	fmt.Println(" Warriors: Legends of Troy (BLES01183) 한글패치")
+	fmt.Println(" Warriors: Legends of Troy (BLES01183) 한글패치 v1.0.1")
 	fmt.Println("==============================================")
 	files, err := loadPatch()
 	if err != nil {
@@ -307,11 +307,15 @@ func run() error {
 	if len(os.Args) > 1 {
 		src = os.Args[1]
 	} else {
-		src = ask("\nISO 파일을 이 창에 끌어다 놓거나 경로를 입력한 뒤 Enter:\n> ")
+		src = ask("\nISO 파일 또는 압축을 푼 게임 폴더(PS3_GAME 폴더가 들어 있는 폴더)를\n이 창에 끌어다 놓거나 경로를 입력한 뒤 Enter:\n> ")
 	}
 	src = strings.Trim(src, "\"' ")
-	if _, err := os.Stat(src); err != nil {
-		return fmt.Errorf("ISO 파일을 찾을 수 없습니다: %s", src)
+	st0, err := os.Stat(src)
+	if err != nil {
+		return fmt.Errorf("파일이나 폴더를 찾을 수 없습니다: %s", src)
+	}
+	if st0.IsDir() {
+		return runFolder(files, src)
 	}
 
 	// check before copying
@@ -471,6 +475,8 @@ func run() error {
 	}
 	fmt.Println("\n완료! 한글패치가 적용되었습니다.")
 	fmt.Println(target)
+	fmt.Println("\n※ 한글 대신 빈칸이 보이면, ISO를 압축 해제한 게임 폴더에")
+	fmt.Println("   이 패처를 다시 적용해 주세요. (폴더를 창에 끌어다 놓으면 됩니다)")
 	return nil
 }
 
