@@ -40,7 +40,7 @@ tools/
 │  └─ build_loc.py    LocalizedCommonPackage_ENG, CommonMasterPackage 빌드
 └─ patcher/
    ├─ mkpatch/        차분 데이터 생성기 (Go)
-   └─ apply/          ISO 패처 (Go, 차분 데이터 내장)
+   └─ apply/          패처 (Go, 차분 데이터 내장, ISO·폴더·UDF)
 ```
 
 ## 순서
@@ -80,13 +80,20 @@ python tools/texture/build_loc.py     # LocalizedCommonPackage_ENG.cpkg, CommonM
 ```
 cd tools/patcher/mkpatch && go build -o mkpatch .
 ./mkpatch <원본루트> <결과루트> list.txt patch.bin   # list.txt: 바뀐 파일 경로 목록
-cp patch.bin ../apply/
+./mkpatch <v1.0.1루트> <결과루트> list_upd.txt patch_upd.bin   # 업데이트용
+cp patch.bin patch_upd.bin ../apply/
 cd ../apply
+# 전체 패처 (patch.bin + patch_upd.bin 내장)
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o TroyKOR_Patcher.exe .
+# 업데이트 패처 (patch.bin을 빈 파일로 두고 빌드)
+: > patch.bin
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.edition=update" -o TroyKOR_Patcher_Update.exe .
 ```
+`udf.go`는 ISO의 UDF 파일 목록을 읽고 고칩니다. `folder.go`는 게임 폴더 적용·백업·되돌리기를 담당합니다.
 `mkpatch`는 만든 차분을 바로 되돌려 결과와 바이트 단위로 같은지 확인합니다.
 
 ### 6. 검증
 - `pycdlib`로 원본 파일과 같은 구조(ISO9660 + Joliet, PS3 영역 표)의 시험용 ISO를 만듭니다.
+- UDF 브리지 ISO(`genisoimage -udf`, UDF 2.50 메타데이터 파티션 변환본)에도 적용한 뒤 7-Zip으로 UDF·ISO9660 양쪽을 풀어 결과와 비교합니다.
 - 패처를 적용한 뒤 두 디렉터리 트리에서 파일을 다시 꺼내 결과와 비교합니다.
 - 마지막으로 실제 ISO에 적용하고 RPCS3에서 확인합니다.

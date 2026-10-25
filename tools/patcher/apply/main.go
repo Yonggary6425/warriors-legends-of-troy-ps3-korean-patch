@@ -19,8 +19,19 @@ import (
 //go:embed patch.bin
 var patchData []byte
 
+//go:embed patch_upd.bin
+var patchUpd []byte
+
+// edition: "full" (원본/v1.0.1 -> 최신) or "update" (v1.0.1 -> 최신)
+var edition = "full"
+
+var version = "1.0.2"
+
 const SEC = 2048
-const titleID = "BLES01183"
+
+var titleID = "BLES01183"
+var gameName = "Warriors: Legends of Troy"
+var prevVersion = "1.0.1"
 
 type op struct {
 	kind   byte
@@ -28,16 +39,19 @@ type op struct {
 	data   []byte
 }
 type pfile struct {
-	path            string
-	origSize        uint64
-	origSHA         [20]byte
-	newSize         uint64
-	newSHA          [20]byte
-	ops             []op
+	path     string
+	origSize uint64
+	origSHA  [20]byte
+	newSize  uint64
+	newSHA   [20]byte
+	ops      []op
 }
 
-func loadPatch() ([]pfile, error) {
-	zr, err := zlib.NewReader(bytes.NewReader(patchData))
+func loadPatch(data []byte) ([]pfile, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +105,10 @@ type rec struct {
 	size uint32
 }
 type iso struct {
-	f       *os.File
-	vds     []int64 // offsets of PVD/SVD sectors
-	files   map[string][]rec
-	total   uint32
+	f     *os.File
+	vds   []int64 // offsets of PVD/SVD sectors
+	files map[string][]rec
+	total uint32
 }
 
 func readAt(f *os.File, off int64, n int) ([]byte, error) {
@@ -297,9 +311,13 @@ func copyFile(src, dst string) error {
 
 func run() error {
 	fmt.Println("==============================================")
-	fmt.Println(" Warriors: Legends of Troy (BLES01183) 한글패치 v1.0.1")
+	if edition == "update" {
+		fmt.Printf(" %s (%s) 한글패치\n 업데이트 v%s → v%s\n", gameName, titleID, prevVersion, version)
+	} else {
+		fmt.Printf(" %s (%s) 한글패치 v%s\n", gameName, titleID, version)
+	}
 	fmt.Println("==============================================")
-	files, err := loadPatch()
+	files, err := loadAll()
 	if err != nil {
 		return err
 	}
@@ -336,7 +354,12 @@ func run() error {
 		return fmt.Errorf("이 패치는 %s 전용입니다. (이 ISO: %s)", titleID, t)
 	}
 	// check originals
-	state := "orig"
+	files, err = resolve(func(p string) ([]byte, error) { b, _, e := chk.read(p); return b, e })
+	if err != nil {
+		chk.f.Close()
+		return err
+	}
+	state := "patched"
 	for _, pf := range files {
 		b, _, err := chk.read(pf.path)
 		if err != nil {
@@ -345,17 +368,17 @@ func run() error {
 		}
 		h := sha1.Sum(b)
 		if h == pf.newSHA && uint64(len(b)) == pf.newSize {
-			state = "patched"
 			continue
 		}
+		state = "orig"
 		if h != pf.origSHA {
 			chk.f.Close()
-			return fmt.Errorf("원본과 다른 파일이 있어 적용할 수 없습니다: %s\n(다른 판본이거나 이미 수정된 ISO일 수 있습니다)", pf.path)
+			return mismatchMsg(pf.path, "ISO")
 		}
 	}
 	chk.f.Close()
 	if state == "patched" {
-		fmt.Println("\n이미 한글패치가 적용된 ISO입니다.")
+		fmt.Println("\n이미 최신 한글패치가 적용된 ISO입니다. (파일 목록만 점검합니다)")
 	}
 
 	fmt.Println("\n[1] 새 ISO 파일로 저장 (권장, 원본 유지)")
@@ -376,6 +399,20 @@ func run() error {
 		return err
 	}
 	defer is.f.Close()
+	uv, uerr := openUDF(is.f)
+	if uerr != nil {
+		fmt.Println("\n※ UDF 정보를 읽지 못해 ISO9660/Joliet만 고칩니다:", uerr)
+		uv = nil
+	}
+	udfOK := map[string]bool{}
+	if uv != nil {
+		for _, pf := range files {
+			rs := is.files[strings.ToUpper(pf.path)]
+			_, inUDF := uv.files[strings.ToUpper(pf.path)]
+			udfOK[pf.path] = len(rs) > 0 && inUDF
+		}
+	}
+	final := map[string][2]uint32{}
 	st, _ := is.f.Stat()
 	end := (st.Size() + SEC - 1) / SEC * SEC
 	oldTotal := uint32(end / SEC)
@@ -425,6 +462,7 @@ func run() error {
 		if _, err := is.f.WriteAt(pad, int64(lba)*SEC); err != nil {
 			return err
 		}
+		final[j.pf.path] = [2]uint32{lba, uint32(len(nb))}
 		for _, r := range j.rs {
 			if err := put32both(is.f, r.off+2, lba); err != nil {
 				return err
@@ -436,6 +474,14 @@ func run() error {
 		fmt.Printf("\r  %d / %d", i+1, len(jobs))
 	}
 	fmt.Println()
+	anchor := false
+	if uv != nil {
+		lb, _ := readAt(is.f, end-SEC, SEC)
+		if len(lb) < 16 || binary.LittleEndian.Uint16(lb) != 2 || binary.LittleEndian.Uint32(lb[12:]) != uint32(end/SEC-1) {
+			end += SEC // UDF anchor copy in the last sector
+			anchor = true
+		}
+	}
 	newTotal := uint32(end / SEC)
 	if newTotal != oldTotal {
 		for _, vd := range is.vds {
@@ -458,6 +504,37 @@ func run() error {
 			return err
 		}
 	}
+	if uv != nil {
+		if err := uv.grow(newTotal, anchor); err != nil {
+			return fmt.Errorf("UDF 갱신 실패: %v", err)
+		}
+		skipped := 0
+		for _, pf := range files {
+			if !udfOK[pf.path] {
+				skipped++
+				continue
+			}
+			v, ok := final[pf.path]
+			if !ok {
+				rs := is.files[strings.ToUpper(pf.path)]
+				v = [2]uint32{rs[0].lba, rs[0].size}
+			}
+			if err := uv.setExtent(pf.path, v[0], v[1]); err != nil {
+				udfOK[pf.path] = false
+				skipped++
+			}
+		}
+		// files patched earlier without UDF support (v1.0~v1.0.1): mirror ISO9660
+		// reopen the ISO9660 tree to get current records
+		if cur, err := openISO(target); err == nil {
+			_, failed := uv.syncFromISO(cur.files)
+			cur.f.Close()
+			skipped += failed
+		}
+		if skipped > 0 {
+			fmt.Printf("\n※ UDF 목록 %d개는 고치지 못했습니다. 반디집 등으로 압축을 풀면\n   그 파일은 원본으로 나올 수 있습니다. (ISO 실행에는 영향 없음)\n", skipped)
+		}
+	}
 	is.f.Sync()
 
 	// verify by re-reading through the directory tree
@@ -473,10 +550,23 @@ func run() error {
 			return fmt.Errorf("적용 후 검증 실패: %s", pf.path)
 		}
 	}
+	if uv != nil {
+		vu, err := openUDF(vf.f)
+		if err != nil || vu == nil {
+			return fmt.Errorf("적용 후 UDF 검증 실패: %v", err)
+		}
+		for _, pf := range files {
+			if !udfOK[pf.path] {
+				continue
+			}
+			b, err := vu.read(pf.path)
+			if err != nil || sha1.Sum(b) != pf.newSHA {
+				return fmt.Errorf("적용 후 UDF 검증 실패: %s", pf.path)
+			}
+		}
+	}
 	fmt.Println("\n완료! 한글패치가 적용되었습니다.")
 	fmt.Println(target)
-	fmt.Println("\n※ 한글 대신 빈칸이 보이면, ISO를 압축 해제한 게임 폴더에")
-	fmt.Println("   이 패처를 다시 적용해 주세요. (폴더를 창에 끌어다 놓으면 됩니다)")
 	return nil
 }
 
@@ -486,4 +576,60 @@ func main() {
 		fmt.Println("\n[오류]", err)
 	}
 	pause()
+}
+
+var sets [][]pfile // candidate patch sets, all ending in the same final files
+var fullSet []pfile
+
+func loadAll() ([]pfile, error) {
+	full, err := loadPatch(patchData)
+	if err != nil {
+		return nil, err
+	}
+	upd, err := loadPatch(patchUpd)
+	if err != nil {
+		return nil, err
+	}
+	if edition == "update" {
+		sets = [][]pfile{upd}
+	} else {
+		sets = [][]pfile{full, upd}
+		fullSet = full
+	}
+	if len(sets[0]) == 0 {
+		return nil, errors.New("패치 데이터가 없습니다")
+	}
+	return sets[0], nil
+}
+
+// resolve picks, for every target file, the patch entry that matches the
+// file's current content (original, previous version, or already final).
+func resolve(read func(string) ([]byte, error)) ([]pfile, error) {
+	out := make([]pfile, 0, len(sets[0]))
+	for _, base := range sets[0] {
+		b, err := read(base.path)
+		if err != nil {
+			return nil, err
+		}
+		h := sha1.Sum(b)
+		pick := base
+		if !(h == base.newSHA && uint64(len(b)) == base.newSize) {
+			for _, set := range sets {
+				for _, pf := range set {
+					if pf.path == base.path && pf.origSHA == h && pf.newSHA == base.newSHA {
+						pick = pf
+					}
+				}
+			}
+		}
+		out = append(out, pick)
+	}
+	return out, nil
+}
+
+func mismatchMsg(path, where string) error {
+	if edition == "update" {
+		return fmt.Errorf("v%s 상태가 아닌 파일이 있습니다: %s\n이 업데이트 패처는 v%s을 적용한 %s 전용입니다.\n처음 적용하신다면 전체 패처(v%s_full)를 쓰세요.", prevVersion, path, prevVersion, where, version)
+	}
+	return fmt.Errorf("원본과 다른 파일이 있어 적용할 수 없습니다: %s\n(다른 판본이거나 이미 수정된 %s일 수 있습니다)", path, where)
 }

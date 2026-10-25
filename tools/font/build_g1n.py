@@ -3,6 +3,7 @@ sys.path.insert(0,'/tmp/claude-0/work')
 import numpy as np
 from g1n import parse
 import hangul
+hangul.STYLES[0].cell=26; hangul.STYLES[0].bot=21  # v1.0.2: 0번 글꼴(자막·안내문) 한글 16px -> 20px
 SRC='/mnt/user-data/uploads/Warriors Legends of Troy [U]/PS3_GAME/USRDIR/PS3/TrojanMusou/Fonts/fonts.g1n'
 d=open(SRC,'rb').read(); g=parse(d)
 chars=open('/tmp/claude-0/tr/charset.txt',encoding='utf-8').read().strip()+'「」'
@@ -24,7 +25,8 @@ for fi,f in enumerate(g['fonts']):
         row=list(idx[y])+[0]*(st*2-w)
         buf+=bytes((row[i]<<4)|row[i+1] for i in range(0,st*2,2))
       off=len(gdata); gdata+=buf
-      e=[w,h,0,h,max(1,w-(4 if fi==3 else 2)),tmpl[5],tmpl[6],tmpl[7],off]
+      yo=tmpl[5]-((h-22)//2 if fi==0 else 0)  # 커진 0번 글꼴 한글을 영문과 세로 중심 맞춤
+      e=[w,h,0,h,max(1,w-(4 if fi==3 else 2)),yo,tmpl[6],tmpl[7],off]
       m[ord(ch)]=len(ents); ents.append(e)
   fonts.append((m,ents))
 # assemble
